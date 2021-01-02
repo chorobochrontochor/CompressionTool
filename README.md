@@ -18,7 +18,7 @@ Tool currently supports only zip format.
 -overwrite #Must be set if you want to override existing files
 ```
 
-###### Compression
+##### Compression
 ```bash
 -compress
 -compressionLevel # Valid values are whole number from 0 to 9 inclusive or -1 for default compression level. (Default value is -1)
@@ -29,7 +29,7 @@ Tool currently supports only zip format.
 -includeHiddenFiles #Must be set if you want to include hidden files and folders
 ```
 
-###### Decompression
+##### Decompression
 ```bash
 -extract
 -extractMode #One of [append, wipe]. (Default value is append) 
