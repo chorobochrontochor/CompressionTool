@@ -7,7 +7,7 @@ apply plugin: 'idea'
 apply plugin: 'application'
 
 group 'chchch'
-version '0.0.1'
+version '1.0.0'
 
 mainClassName = 'chchch.CompressionTool'
 sourceCompatibility = 1.8
