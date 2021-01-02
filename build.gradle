@@ -1,0 +1,38 @@
+plugins {
+    id 'java-library'
+}
+
+apply plugin: 'java'
+apply plugin: 'idea'
+apply plugin: 'application'
+
+group 'chchch'
+version '0.0.1'
+
+mainClassName = 'chchch.CompressionTool'
+sourceCompatibility = 1.8
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+
+}
+
+jar {
+    baseName = 'CompressionTool'
+    version = version
+    manifest {
+        attributes(
+                'Implementation-Version': version,
+                'Implementation-Title': baseName,
+                'Implementation-Vendor': 'Marek Jelinek',
+                'Class-Path': configurations.runtime.files.collect { "lib/$it.name" }.join(' '),
+                'Main-Class': 'chchch.CompressionTool'
+        )
+    }
+    from {
+        configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+}
