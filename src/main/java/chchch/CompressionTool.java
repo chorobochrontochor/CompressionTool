@@ -90,27 +90,28 @@ public class CompressionTool
         }
         return false;
     }
-    private static void zipNext(File file, String parentEntryName, ZipOutputStream zipOut, int bufferSize, boolean includeEmptyFolders, boolean includeHiddenFiles) throws IOException
+    private static void zipNext(boolean includeRootFolder, File file, String parentEntryName, ZipOutputStream zipOut, int bufferSize, boolean includeEmptyFolders, boolean includeHiddenFiles) throws IOException
     {
         if (!includeFile(file, includeHiddenFiles)) return;
-        String entryName = combinePath(parentEntryName, file.getName());
         if (file.isDirectory()) {
-            entryName = addTrailingSlash(entryName);
-
             File[] innerFiles = file.listFiles();
             if (includeFolder(file, innerFiles, includeEmptyFolders, includeHiddenFiles)) {
-                zipOut.putNextEntry(new ZipEntry(entryName));
-                zipOut.closeEntry();
+                String entryName = addTrailingSlash(combinePath(parentEntryName, file.getName()));
+                if (includeRootFolder) {
+                    zipOut.putNextEntry(new ZipEntry(entryName));
+                    zipOut.closeEntry();
 
-                System.out.println("Added folder: " + entryName);
+                    System.out.println("Added folder: " + entryName);
+                }
 
                 if (innerFiles != null) {
                     for (File innerFile : innerFiles) {
-                        zipNext(innerFile, entryName, zipOut, bufferSize, includeEmptyFolders, includeHiddenFiles);
+                        zipNext(true, innerFile, includeRootFolder ? entryName : null, zipOut, bufferSize, includeEmptyFolders, includeHiddenFiles);
                     }
                 }
             }
         } else {
+            String entryName = combinePath(parentEntryName, file.getName());
             FileInputStream fileInputStream = new FileInputStream(file);
             ZipEntry zipEntry = new ZipEntry(entryName);
             zipOut.putNextEntry(zipEntry);
@@ -137,17 +138,7 @@ public class CompressionTool
 
         zipOutputStream.setLevel(compressionLevel);
 
-        String entryName = null;
-        if (includeRootFolder && rootFile.isDirectory()) {
-            entryName = addTrailingSlash(rootFile.getName());
-
-            zipOutputStream.putNextEntry(new ZipEntry(entryName));
-            zipOutputStream.closeEntry();
-
-            System.out.println("Added root folder: " + entryName);
-        }
-
-        zipNext(rootFile, entryName, zipOutputStream, bufferSize, includeEmptyFolders, includeHiddenFiles);
+        zipNext(includeRootFolder, rootFile, null, zipOutputStream, bufferSize, includeEmptyFolders, includeHiddenFiles);
 
         zipOutputStream.close();
         fileOutputStream.close();
