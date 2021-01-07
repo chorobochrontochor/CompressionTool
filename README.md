@@ -27,6 +27,7 @@ Tool currently supports only zip format.
 -includeEmptyFolders #Must be set if you want to include empty folders
 -includeRootFolder #Must be set if you want to include root folder into compressed file
 -includeHiddenFiles #Must be set if you want to include hidden files and folders
+-excludeByRegexp #Exclude files and folders by regular expression
 ```
 
 ##### Decompression
@@ -38,4 +39,4 @@ Tool currently supports only zip format.
 ```
 
 ## Releases
-Latest release: [1.0.0](https://github.com/chorobochrontochor/CompressionTool/releases)
+Latest release: [1.1.0](https://github.com/chorobochrontochor/CompressionTool/releases)
