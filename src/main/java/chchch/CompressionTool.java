@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
@@ -16,42 +17,8 @@ public class CompressionTool
     private static String ExtractMode_Append = "append";
     private static String ExtractMode_Wipe = "wipe";
 
-    private static String getAppName()
-    {
-        return CompressionTool.class.getPackage().getImplementationTitle();
-    }
-    private static String getAppVersion() { return CompressionTool.class.getPackage().getImplementationVersion(); }
-
     private static byte[] _sharedBuffer;
 
-    private static boolean hasArg(String[] args, String flag)
-    {
-        for (String arg : args) {
-            if (arg.equals(flag)) {
-                return true;
-            }
-        }
-        return false;
-    }
-    private static String getArgValue(String[] args, String flag, boolean optional, String defaultValue) throws Exception
-    {
-        boolean nextIsValue = false;
-        for (String arg : args) {
-            if (nextIsValue) {
-                return arg;
-            }
-            if (arg.equals(flag)) {
-                nextIsValue = true;
-            }
-        }
-        if (optional) return defaultValue;
-
-        if (nextIsValue) {
-            throw new Exception("Value for mandatory argument \"" + flag + "\" is missing!");
-        } else {
-            throw new Exception("Mandatory argument \"" + flag + "\" is missing!");
-        }
-    }
     private static byte[] getSharedBuffer(int size)
     {
         if (_sharedBuffer == null || _sharedBuffer.length < size) {
@@ -59,44 +26,30 @@ public class CompressionTool
         }
         return _sharedBuffer;
     }
-    private static String combinePath(String path1, String path2)
+    private static boolean includeFile(File file, boolean includeHiddenFiles, Pattern excludeByRegexpPattern)
     {
-        if (path1 == null || path1.isEmpty()) return path2;
-        return addTrailingSlash(path1) + removeLeadingSlash(path2);
+        if (!includeHiddenFiles && file.isHidden()) return false;
+        return excludeByRegexpPattern == null || !excludeByRegexpPattern.matcher(file.getName()).matches();
     }
-    private static String addTrailingSlash(String path)
+    private static boolean includeFolder(File file, File[] files, boolean includeEmptyFolders, boolean includeHiddenFiles, Pattern excludeByRegexpPattern)
     {
-        if (path.endsWith("/")) return path;
-        return path + "/";
-    }
-    private static String removeLeadingSlash(String path)
-    {
-        if (path.startsWith("/")) return path.substring(1);
-        return path;
-    }
-    private static boolean includeFile(File file, boolean includeHiddenFiles)
-    {
-        return includeHiddenFiles || !file.isHidden();
-    }
-    private static boolean includeFolder(File file, File[] files, boolean includeEmptyFolders, boolean includeHiddenFiles)
-    {
-        if (!includeFile(file, includeHiddenFiles)) return false;
+        if (!includeFile(file, includeHiddenFiles, excludeByRegexpPattern)) return false;
         if (!includeEmptyFolders && (files == null || files.length == 0)) return false;
         if (files == null) return false;
         for (File innerFile : files) {
-            if (!includeFile(innerFile, includeHiddenFiles)) continue;
+            if (!includeFile(innerFile, includeHiddenFiles, excludeByRegexpPattern)) continue;
             if (innerFile.isFile()) return true;
-            if (innerFile.isDirectory() && includeFolder(innerFile, innerFile.listFiles(), includeEmptyFolders, includeHiddenFiles)) return true;
+            if (innerFile.isDirectory() && includeFolder(innerFile, innerFile.listFiles(), includeEmptyFolders, includeHiddenFiles, excludeByRegexpPattern)) return true;
         }
         return false;
     }
-    private static void zipNext(boolean includeRootFolder, File file, String parentEntryName, ZipOutputStream zipOut, int bufferSize, boolean includeEmptyFolders, boolean includeHiddenFiles) throws IOException
+    private static void zipNext(boolean includeRootFolder, File file, String parentEntryName, ZipOutputStream zipOut, int bufferSize, boolean includeEmptyFolders, boolean includeHiddenFiles, Pattern excludeByRegexpPattern) throws IOException
     {
-        if (!includeFile(file, includeHiddenFiles)) return;
+        if (!includeFile(file, includeHiddenFiles, excludeByRegexpPattern)) return;
         if (file.isDirectory()) {
             File[] innerFiles = file.listFiles();
-            if (includeFolder(file, innerFiles, includeEmptyFolders, includeHiddenFiles)) {
-                String entryName = addTrailingSlash(combinePath(parentEntryName, file.getName()));
+            if (includeFolder(file, innerFiles, includeEmptyFolders, includeHiddenFiles, excludeByRegexpPattern)) {
+                String entryName = Base.addTrailingSlash(Base.combinePath(parentEntryName, file.getName()));
                 if (includeRootFolder) {
                     zipOut.putNextEntry(new ZipEntry(entryName));
                     zipOut.closeEntry();
@@ -106,12 +59,12 @@ public class CompressionTool
 
                 if (innerFiles != null) {
                     for (File innerFile : innerFiles) {
-                        zipNext(true, innerFile, includeRootFolder ? entryName : null, zipOut, bufferSize, includeEmptyFolders, includeHiddenFiles);
+                        zipNext(true, innerFile, includeRootFolder ? entryName : null, zipOut, bufferSize, includeEmptyFolders, includeHiddenFiles, excludeByRegexpPattern);
                     }
                 }
             }
         } else {
-            String entryName = combinePath(parentEntryName, file.getName());
+            String entryName = Base.combinePath(parentEntryName, file.getName());
             FileInputStream fileInputStream = new FileInputStream(file);
             ZipEntry zipEntry = new ZipEntry(entryName);
             zipOut.putNextEntry(zipEntry);
@@ -125,7 +78,7 @@ public class CompressionTool
             System.out.println("Added file: " + entryName);
         }
     }
-    private static void compress(String sourcePath, String destinationPath, int bufferSize, boolean overwrite, boolean includeRootFolder, boolean includeEmptyFolders, boolean includeHiddenFiles, int compressionLevel) throws IOException
+    private static void compress(String sourcePath, String destinationPath, int bufferSize, boolean overwrite, boolean includeRootFolder, boolean includeEmptyFolders, boolean includeHiddenFiles, Pattern excludeByRegexpPattern, int compressionLevel) throws IOException
     {
         File rootFile = new File(sourcePath);
         File zipFile = new File(destinationPath);
@@ -138,7 +91,7 @@ public class CompressionTool
 
         zipOutputStream.setLevel(compressionLevel);
 
-        zipNext(includeRootFolder, rootFile, null, zipOutputStream, bufferSize, includeEmptyFolders, includeHiddenFiles);
+        zipNext(includeRootFolder, rootFile, null, zipOutputStream, bufferSize, includeEmptyFolders, includeHiddenFiles, excludeByRegexpPattern);
 
         zipOutputStream.close();
         fileOutputStream.close();
@@ -234,23 +187,24 @@ public class CompressionTool
     {
         try
         {
-            System.out.println(getAppName() + ": v" + getAppVersion());
-            if (hasArg(args, "-version")) {
+            System.out.println(Base.getFullName(CompressionTool.class));
+            if (Base.hasArg(args, "-version")) {
                 System.exit(0);
             }
 
             System.out.print("Processing command line arguments...");
-            String sourcePath = getArgValue(args, "-sourcePath", false, null);
-            String destinationPath = getArgValue(args, "-destinationPath", false, null);
-            boolean overwrite = hasArg(args, "-overwrite");
-            int bufferSize = Integer.parseInt(getArgValue(args, "-bufferSize", true, "1024" ));
-            boolean compress = hasArg(args, "-compress");
-            int compressionLevel = Integer.parseInt(getArgValue(args, "-compressionLevel", true, "-1" ));
-            boolean includeEmptyFolders = hasArg(args, "-includeEmptyFolders");
-            boolean includeRootFolder = hasArg(args, "-includeRootFolder");
-            boolean includeHiddenFiles = hasArg(args, "-includeHiddenFiles");
-            boolean extract = hasArg(args, "-extract");
-            String extractMode = getArgValue(args, "-extractMode", true, ExtractMode_Append);
+            String sourcePath = Base.getArgValue(args, "-sourcePath", false, null);
+            String destinationPath = Base.getArgValue(args, "-destinationPath", false, null);
+            boolean overwrite = Base.hasArg(args, "-overwrite");
+            int bufferSize = Integer.parseInt(Base.getArgValue(args, "-bufferSize", true, "1024" ));
+            boolean compress = Base.hasArg(args, "-compress");
+            int compressionLevel = Integer.parseInt(Base.getArgValue(args, "-compressionLevel", true, "-1" ));
+            boolean includeEmptyFolders = Base.hasArg(args, "-includeEmptyFolders");
+            boolean includeRootFolder = Base.hasArg(args, "-includeRootFolder");
+            boolean includeHiddenFiles = Base.hasArg(args, "-includeHiddenFiles");
+            String excludeByRegexp = Base.getArgValue(args, "-excludeByRegexp", true, null);
+            boolean extract = Base.hasArg(args, "-extract");
+            String extractMode = Base.getArgValue(args, "-extractMode", true, ExtractMode_Append);
             ArrayList<String> list = new ArrayList<>();
             list.add(ExtractMode_Append);
             list.add(ExtractMode_Wipe);
@@ -260,6 +214,10 @@ public class CompressionTool
 
             if (compress == extract) {
                 throw new Exception("Either -compress or -extract must be specified!");
+            }
+            Pattern excludeByRegexpPattern = null;
+            if (excludeByRegexp != null) {
+                excludeByRegexpPattern = Pattern.compile(excludeByRegexp);
             }
 
             System.out.println("Done.");
@@ -276,6 +234,7 @@ public class CompressionTool
                 System.out.println(" - includeEmptyFolders: " + includeEmptyFolders);
                 System.out.println(" - includeRootFolder: " + includeRootFolder);
                 System.out.println(" - includeHiddenFiles: " + includeHiddenFiles);
+                System.out.println(" - excludeByRegexp: " + excludeByRegexp);
             }
             if (extract) {
                 System.out.println(" - extract: " + extract);
@@ -286,7 +245,7 @@ public class CompressionTool
 
             if (compress) {
                 System.out.println("Compressing...");
-                compress(sourcePath, destinationPath, bufferSize, overwrite, includeRootFolder, includeEmptyFolders, includeHiddenFiles, compressionLevel);
+                compress(sourcePath, destinationPath, bufferSize, overwrite, includeRootFolder, includeEmptyFolders, includeHiddenFiles, excludeByRegexpPattern, compressionLevel);
                 System.out.println("Done.");
             }
             if (extract) {
